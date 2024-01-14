@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      * {
+        padding: 0;
+        margin: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        background-image: url(./imgs/bg3.jpeg);
+        background-repeat: repeat;
+        background-size: 100px;
+      }
+      #joystick {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+      }
+
+      #joystick-handle {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 50px;
+        height: 50px;
+        margin-top: -25px;
+        margin-left: -25px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.5);
+      }
+
+      #startbtn {
+        position: absolute;
+        z-index: 999;
+        width: 200px;
+        height: 50px;
+        left: 50%;
+        margin-left: -100px;
+        top: 60%;
+        background:url(./imgs/start.jpg) no-repeat;
+        background-size: 100%;
+        background-position: center;
+      }
+
+      #startpage{
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        z-index: 100;
+        background-color: #171516;
+        display: flex;
+        justify-content: center;
+      }
+
+      #startpage img{
+        width: 256px;
+        height: 256px;
+      }
+      #header {  
+        background-color: #3415ff; /* 背景色为白色 */  
+            text-align: center; /* 文本水平居中 */  
+            padding: 20px 0; /* 上下内边距为20px，左右为0 */  
+            color: #ff69b4; /* 字体颜色为粉色 */  
+            font-weight: bold; /* 字体加粗 */  
+            font-size: 35px; /* 设置字体大小为24像素 */  
+}
+    </style>
+  </head>
+  <body>
+    <div id="header">欢迎来到贾宇暄自制射击游戏网站</div> 
+    <div id="joystick">
+      <div id="joystick-handle"></div>
+    </div>
+
+    <div id="startpage">
+        <img src="./imgs/logo.jpeg" alt="">
+        <button id="startbtn"></button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <audio src="./audio/bg.mp3" id="bgmusic"></audio>
+    <audio src="./audio/gun.mp3" id="gunmusic"></audio>
+    <script>
+      // 定义画布和画笔
+      var canvas = document.getElementById("canvas");
+      //   将canvas标签的宽度和高度设置为当前窗口的宽度和高度
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      var ctx = canvas.getContext("2d");
+
+      // 定义游戏元素
+      var player = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        size: 60,
+        speed: 5,
+      };
+      var playerImage = null;
+      var bullets = [];
+      var enemies = [];
+      var score = 0;
+      //   敌人的图片
+      var enemiesImg = [];
+
+      var gameInterval = null;
+
+      //   加载图片
+      function loadImg(url) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.src = url;
+          img.onload = function () {
+            resolve(img);
+          };
+          img.onerror = function () {
+            reject("image laod fail");
+          };
+        });
+      }
+
+      async function loadResource() {
+        playerImage = await loadImg("./imgs/player-1.png");
+        let en1 = await loadImg("./imgs/zb-1.png");
+        enemiesImg.push(en1);
+        let en2 = await loadImg("./imgs/zb-2.png");
+        enemiesImg.push(en2);
+        let en3 = await loadImg("./imgs/zb-3.png");
+        enemiesImg.push(en3);
+        let en4 = await loadImg("./imgs/zb-4.png");
+        enemiesImg.push(en4);
+      }
+
+      // 监听摇杆事件，改变主角的移动方向
+      document.addEventListener("joystickmove", function (event) {
+        player.x += event.detail.dx * player.speed;
+        player.y += event.detail.dy * player.speed;
+      });
+
+      // 监听点击事件，发射子弹
+      document.addEventListener("click", function (event) {
+        var bullet = {
+          x: player.x,
+          y: player.y,
+          size: 5,
+          speed: 10,
+          direction: Math.atan2(
+            event.clientY - player.y,
+            event.clientX - player.x
+          ),
+        };
+        bullets.push(bullet);
+
+        shootMusic()
+      });
+
+      function shootMusic(){
+        gunmusic.currentTime = 0;
+        gunmusic.play()
+      }
+
+      // 获取摇杆元素和摇杆手柄元素
+      var joystick = document.getElementById("joystick");
+      var handle = document.getElementById("joystick-handle");
+
+      // 定义摇杆的半径和中心点坐标
+      var radius = joystick.offsetWidth / 2;
+      var centerX = joystick.offsetLeft + radius;
+      var centerY = joystick.offsetTop + radius;
+
+      // 监听摇杆手柄的触摸事件
+      handle.addEventListener("touchstart", function (event) {
+        event.preventDefault();
+      });
+
+      handle.addEventListener("touchmove", function (event) {
+        event.preventDefault();
+
+        // 获取手指在摇杆上的位置
+        var touchX = event.touches[0].clientX - centerX;
+        var touchY = event.touches[0].clientY - centerY;
+
+        // 计算手柄的位置
+        var distance = Math.sqrt(touchX * touchX + touchY * touchY);
+        if (distance > radius) {
+          touchX = (touchX * radius) / distance;
+          touchY = (touchY * radius) / distance;
+        }
+        handle.style.left = centerX + touchX + "px";
+        handle.style.top = centerY + touchY + "px";
+
+        // 触发摇杆移动事件
+        var dx = touchX / radius;
+        var dy = touchY / radius;
+        var event = new CustomEvent("joystickmove", {
+          detail: { dx: dx, dy: dy },
+        });
+        document.dispatchEvent(event);
+      });
+
+      handle.addEventListener("touchend", function (event) {
+        event.preventDefault();
+
+        // 将手柄归位
+        handle.style.left = "50%";
+        handle.style.top = "50%";
+
+        // 触发摇杆移动事件
+        var event = new CustomEvent("joystickmove", {
+          detail: { dx: 0, dy: 0 },
+        });
+        document.dispatchEvent(event);
+      });
+
+      // 定义游戏循环
+      function gameLoop() {
+        // 清空画布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 绘制主角
+        ctx.drawImage(
+          playerImage,
+          player.x - player.size / 2,
+          player.y - player.size / 2,
+          player.size,
+          player.size
+        );
+
+        // 绘制子弹
+        ctx.fillStyle = "red";
+        for (var i = 0; i < bullets.length; i++) {
+          ctx.fillRect(
+            bullets[i].x - bullets[i].size / 2,
+            bullets[i].y - bullets[i].size / 2,
+            bullets[i].size,
+            bullets[i].size
+          );
+        }
+
+        // 绘制敌人
+        ctx.fillStyle = "green";
+        for (var i = 0; i < enemies.length; i++) {
+          //   ctx.fillRect(
+          //     enemies[i].x - enemies[i].size / 2,
+          //     enemies[i].y - enemies[i].size / 2,
+          //     enemies[i].size,
+          //     enemies[i].size
+          //   );
+          ctx.drawImage(
+            enemies[i].img,
+            enemies[i].x - enemies[i].size / 2,
+            enemies[i].y - enemies[i].size / 2,
+            enemies[i].size,
+            enemies[i].size
+          );
+        }
+
+        // 移动子弹的位置
+        for (var i = 0; i < bullets.length; i++) {
+          bullets[i].x += bullets[i].speed * Math.cos(bullets[i].direction);
+          bullets[i].y += bullets[i].speed * Math.sin(bullets[i].direction);
+
+          // 判断子弹是否击中敌人
+          for (var j = 0; j < enemies.length; j++) {
+            if (
+              Math.abs(bullets[i].x - enemies[j].x) <
+                bullets[i].size / 2 + enemies[j].size / 2 &&
+              Math.abs(bullets[i].y - enemies[j].y) <
+                bullets[i].size / 2 + enemies[j].size / 2
+            ) {
+              bullets.splice(i, 1);
+              enemies.splice(j, 1);
+              score++;
+              break;
+            }
+          }
+        }
+
+        // 移动敌人的位置
+        for (var i = 0; i < enemies.length; i++) {
+          var direction = Math.atan2(
+            player.y - enemies[i].y,
+            player.x - enemies[i].x
+          );
+          enemies[i].x += enemies[i].speed * Math.cos(direction);
+          enemies[i].y += enemies[i].speed * Math.sin(direction);
+
+          // 判断敌人是否碰到主角
+          if (
+            Math.abs(player.x - enemies[i].x) <
+              player.size / 2 + enemies[i].size / 2 &&
+            Math.abs(player.y - enemies[i].y) <
+              player.size / 2 + enemies[i].size / 2
+          ) {
+            clearInterval(gameInterval);
+            alert("游戏结束！恭喜你成功得分：" + score);
+          }
+        }
+
+        // 添加新的敌人
+        if (Math.random() < 0.01) {
+          var enemy = {
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: 50,
+            speed: 1,
+            img: enemiesImg[Math.floor(Math.random() * enemiesImg.length)],
+          };
+          enemies.push(enemy);
+        }
+      }
+
+      const startbtn = document.querySelector("#startbtn");
+      startbtn.onclick = async function () {
+        await loadResource();
+        // 隐藏开始界面
+        startpage.style.display = "none";
+        // 开始游戏循环
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+
+        // 播放背景音乐
+        bgmusic.play()
+      };
+
+      window.addEventListener("resize", function () {
+        document.body.style.height = window.innerHeight + "px";
+      });
+    </script>
+  </body>
+</html>
